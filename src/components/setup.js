@@ -127,7 +127,7 @@ export class SetupController {
         <div class="icon">📚</div>
         <p><strong>Tap to choose file</strong> or drag &amp; drop</p>
         <p style="font-size:.75rem;opacity:.7">CSV file from Storygraph</p>
-        <input type="file" id="file-input" accept=".csv" style="display:none" />
+        <input type="file" id="file-input" accept=".csv,text/csv,text/plain,application/csv" style="display:none" />
       </div>
 
       <div id="step2-msg"></div>
