@@ -1,8 +1,8 @@
 /**
  * Setup screen — 3 steps:
  * 1. Last.fm credentials
- * 2. Date range for history
- * 3. Storygraph CSV upload
+ * 2. Storygraph CSV upload
+ * 3. Date range for history (with "Match my books" option)
  */
 
 import { setRaw, get as cacheGet } from '../utils/cache.js'
@@ -19,8 +19,20 @@ function defaultDateRange() {
   }
 }
 
-function formatDate(isoStr) {
-  return isoStr // already YYYY-MM-DD
+/**
+ * Compute the date range covered by a parsed books array.
+ * Returns { from, to } as 'YYYY-MM-DD' strings, or null if no dated books.
+ */
+function getBookDateRange(books) {
+  const allDates = books.flatMap(b => b.datesRead)
+  if (!allDates.length) return null
+  const timestamps = allDates.map(d => d.getTime())
+  const min = new Date(Math.min(...timestamps))
+  const max = new Date(Math.max(...timestamps))
+  return {
+    from: min.toISOString().slice(0, 10),
+    to:   max.toISOString().slice(0, 10),
+  }
 }
 
 export class SetupController {
@@ -41,7 +53,7 @@ export class SetupController {
     this.container.innerHTML = `
       <div class="setup-header">
         <div class="logo">read<span>2</span>listen</div>
-        <p style="margin-top:8px;font-size:.9rem">Compare your reading & listening habits</p>
+        <p style="margin-top:8px;font-size:.9rem">Compare your reading &amp; listening habits</p>
       </div>
 
       <div class="setup-steps" aria-hidden="true">
@@ -96,38 +108,6 @@ export class SetupController {
   }
 
   renderStep2() {
-    const { from, to } = this.state.dateRange
-    return `
-      <div>
-        <h2>Choose date range</h2>
-        <p style="margin-top:4px;font-size:.875rem">
-          Select how far back to fetch your Last.fm listening history.
-          Longer ranges take more time to load.
-        </p>
-      </div>
-
-      <div class="form-group">
-        <label for="date-from">From</label>
-        <input id="date-from" type="date" value="${from}" max="${to}" />
-      </div>
-
-      <div class="form-group">
-        <label for="date-to">To</label>
-        <input id="date-to" type="date" value="${to}" min="${from}" />
-      </div>
-
-      <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" data-preset="1y">Last year</button>
-        <button class="btn btn-secondary btn-sm" data-preset="3y">3 years</button>
-        <button class="btn btn-secondary btn-sm" data-preset="all">All time</button>
-      </div>
-
-      <button class="btn btn-primary" id="btn-date-next">Continue</button>
-      <button class="btn btn-ghost" id="btn-back-1">← Back</button>
-    `
-  }
-
-  renderStep3() {
     const existing = cacheGet('storygraph_books')
     return `
       <div>
@@ -150,12 +130,57 @@ export class SetupController {
         <input type="file" id="file-input" accept=".csv" style="display:none" />
       </div>
 
-      <div id="step3-msg"></div>
+      <div id="step2-msg"></div>
 
       ${existing ? `<button class="btn btn-primary" id="btn-use-existing">
         Use saved data (${existing.length} books)
       </button>` : ''}
 
+      <button class="btn btn-ghost" id="btn-back-1">← Back</button>
+    `
+  }
+
+  renderStep3() {
+    const { from, to } = this.state.dateRange
+
+    // Compute book date range for the "match" preset
+    const books = this.state.books || cacheGet('storygraph_books')
+    const bookRange = books ? getBookDateRange(books) : null
+
+    return `
+      <div>
+        <h2>Choose date range</h2>
+        <p style="margin-top:4px;font-size:.875rem">
+          Select how far back to fetch your Last.fm listening history.
+          Longer ranges take more time to load.
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label for="date-from">From</label>
+        <input id="date-from" type="date" value="${from}" max="${to}" />
+      </div>
+
+      <div class="form-group">
+        <label for="date-to">To</label>
+        <input id="date-to" type="date" value="${to}" min="${from}" />
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" data-preset="1y">Last year</button>
+        <button class="btn btn-secondary btn-sm" data-preset="3y">3 years</button>
+        <button class="btn btn-secondary btn-sm" data-preset="all">All time</button>
+        ${bookRange ? `<button class="btn btn-secondary btn-sm" data-preset="books"
+          title="Match the date range of your Storygraph data (${bookRange.from} → ${bookRange.to})">
+          Match my books
+        </button>` : ''}
+      </div>
+
+      ${bookRange ? `<p style="font-size:.8rem;color:var(--clr-muted)">
+        Your Storygraph data spans <strong>${bookRange.from}</strong> → <strong>${bookRange.to}</strong>
+      </p>` : ''}
+
+      <button class="btn btn-primary" id="btn-date-next">Continue</button>
       <button class="btn btn-ghost" id="btn-back-2">← Back</button>
     `
   }
@@ -176,36 +201,6 @@ export class SetupController {
     }
 
     if (this.step === 2) {
-      const fromInput = body.querySelector('#date-from')
-      const toInput   = body.querySelector('#date-to')
-
-      body.querySelectorAll('[data-preset]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const to = new Date()
-          const from = new Date()
-          const preset = btn.dataset.preset
-          if (preset === '1y')  from.setFullYear(to.getFullYear() - 1)
-          if (preset === '3y')  from.setFullYear(to.getFullYear() - 3)
-          if (preset === 'all') from.setFullYear(2002) // Last.fm founded
-          fromInput.value = from.toISOString().slice(0, 10)
-          toInput.value   = to.toISOString().slice(0, 10)
-        })
-      })
-
-      body.querySelector('#btn-date-next').addEventListener('click', () => {
-        this.state.dateRange = { from: fromInput.value, to: toInput.value }
-        setRaw('cfg_dates', this.state.dateRange)
-        this.step = 3
-        this.render()
-      })
-
-      body.querySelector('#btn-back-1').addEventListener('click', () => {
-        this.step = 1
-        this.render()
-      })
-    }
-
-    if (this.step === 3) {
       const dropzone  = body.querySelector('#dropzone')
       const fileInput = body.querySelector('#file-input')
 
@@ -227,7 +222,49 @@ export class SetupController {
 
       body.querySelector('#btn-use-existing')?.addEventListener('click', () => {
         const existing = cacheGet('storygraph_books')
-        if (existing) this.onComplete(existing, this.state)
+        if (existing) {
+          this.state.books = existing
+          this.step = 3
+          this.render()
+        }
+      })
+
+      body.querySelector('#btn-back-1').addEventListener('click', () => {
+        this.step = 1
+        this.render()
+      })
+    }
+
+    if (this.step === 3) {
+      const fromInput = body.querySelector('#date-from')
+      const toInput   = body.querySelector('#date-to')
+
+      const books = this.state.books || cacheGet('storygraph_books')
+      const bookRange = books ? getBookDateRange(books) : null
+
+      body.querySelectorAll('[data-preset]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const preset = btn.dataset.preset
+          if (preset === 'books' && bookRange) {
+            fromInput.value = bookRange.from
+            toInput.value   = bookRange.to
+          } else {
+            const to = new Date()
+            const from = new Date()
+            if (preset === '1y')  from.setFullYear(to.getFullYear() - 1)
+            if (preset === '3y')  from.setFullYear(to.getFullYear() - 3)
+            if (preset === 'all') from.setFullYear(2002)
+            fromInput.value = from.toISOString().slice(0, 10)
+            toInput.value   = to.toISOString().slice(0, 10)
+          }
+        })
+      })
+
+      body.querySelector('#btn-date-next').addEventListener('click', () => {
+        this.state.dateRange = { from: fromInput.value, to: toInput.value }
+        setRaw('cfg_dates', this.state.dateRange)
+        const books = this.state.books || cacheGet('storygraph_books')
+        this.onComplete(books, this.state)
       })
 
       body.querySelector('#btn-back-2').addEventListener('click', () => {
@@ -277,7 +314,7 @@ export class SetupController {
 
   handleFile(file) {
     const body = this.container.querySelector('#setup-body')
-    const msg  = body.querySelector('#step3-msg')
+    const msg  = body.querySelector('#step2-msg')
 
     if (!file.name.endsWith('.csv')) {
       msg.innerHTML = `<div class="alert alert-error">Please upload a .csv file.</div>`
@@ -297,8 +334,9 @@ export class SetupController {
           return
         }
         setRaw('storygraph_books', books)
+        this.state.books = books
         msg.innerHTML = `<div class="alert alert-success">✓ Loaded ${books.length} books</div>`
-        setTimeout(() => this.onComplete(books, this.state), 600)
+        setTimeout(() => { this.step = 3; this.render() }, 600)
       } catch (err) {
         msg.innerHTML = `<div class="alert alert-error">Failed to parse CSV: ${err.message}</div>`
       }
