@@ -5,7 +5,9 @@
  *   Title, Authors, Contributors, ISBN/UID, Format, Read Status,
  *   Date Added, Last Date Read, Dates Read, Read Count,
  *   Moods, Pace, Character- or Plot-Driven?, Strong Character Development?,
- *   Loveable Characters?, Diverse Characters?
+ *   Loveable Characters?, Diverse Characters?, Flawed Characters?,
+ *   Star Rating, Review, Content Warnings, Content Warning Description,
+ *   Tags, Owned?
  */
 
 /**
@@ -105,15 +107,22 @@ function normaliseRow(row, headers) {
     if (fallback) datesRead.push(fallback)
   }
 
+  const ratingRaw = col('star rating')
+  const rating = ratingRaw ? parseFloat(ratingRaw) : null
+
   return {
-    title:     col('title'),
-    authors:   col('authors'),
-    format:    col('format') || 'Unknown',       // Physical, Digital, Audio
+    title:              col('title'),
+    authors:            col('authors'),
+    format:             col('format') || 'Unknown',  // Physical, Digital, Audio
     status,
-    readCount: parseInt(col('read count') || '1', 10),
-    datesRead,                                    // array of finish dates
-    moods:     parseMoods(col('moods')),
-    pace:      col('pace'),
+    readCount:          parseInt(col('read count') || '1', 10),
+    datesRead,                                        // array of finish dates
+    moods:              parseMoods(col('moods')),
+    pace:               col('pace'),
+    rating:             isNaN(rating) ? null : rating,
+    review:             col('review'),
+    contentWarnings:    parseMoods(col('content warnings')),  // comma-separated like moods
+    tags:               parseMoods(col('tags')),              // comma-separated
   }
 }
 
